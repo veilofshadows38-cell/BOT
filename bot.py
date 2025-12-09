@@ -1,11 +1,11 @@
 import os
-import time
+import asyncio
 import datetime
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 TOKEN = "8573280925:AAHlT2QIZTvFbFyV4YgGR56cuz_-4ld-Yy4"
 CHAT_ID = -1002659872445
-
 
 BASE_PATH = "images"
 
@@ -250,63 +250,63 @@ Rewards credited instantly
 ]
 
 # ==============================
-#   AUTO SEND — 8 AM + 30 MIN
+#   ASYNC SCHEDULER
 # ==============================
-def auto_scheduler(bot):
-    msg_index = 0
-    started_today = False
-
+async def scheduler(app):
     while True:
-        now = datetime.datetime.now()
-        current_time = now.strftime("%H:%M")
+        now = datetime.datetime.now().strftime("%H:%M")
 
-        if current_time == "08:00":
-            started_today = True
-            msg_index = 0
-            print("Starting scheduled messages for today!")
+        if now == "08:00":
+            print("🎉 Starting message schedule!")
 
-        if started_today:
-            message, photo_name = MESSAGES[msg_index]
-            photo_path = os.path.join(BASE_PATH, photo_name)
+            for idx, (text, photo) in enumerate(MESSAGES):
+                photo_path = os.path.join(BASE_PATH, photo)
 
-            try:
-                if os.path.exists(photo_path):
-                    with open(photo_path, "rb") as f:
-                        bot.send_photo(chat_id=CHAT_ID, photo=f, caption=message)
-                else:
-                    bot.send_message(chat_id=CHAT_ID, text=message)
+                try:
+                    if os.path.exists(photo_path):
+                        await app.bot.send_photo(
+                            chat_id=CHAT_ID,
+                            photo=open(photo_path, "rb"),
+                            caption=text
+                        )
+                    else:
+                        await app.bot.send_message(
+                            chat_id=CHAT_ID,
+                            text=text
+                        )
 
-                print(f"Sent message #{msg_index + 1}")
+                    print(f"✔ Sent message #{idx+1}")
 
-            except Exception as e:
-                print("SEND ERROR:", e)
+                except Exception as e:
+                    print("SEND ERROR:", e)
 
-            msg_index += 1
+                if idx != len(MESSAGES) - 1:
+                    await asyncio.sleep(60 * 30)
 
-            if msg_index >= len(MESSAGES):
-                print("All 10 messages sent. Waiting for next day.")
-                started_today = False
-            else:
-                time.sleep(60 * 30)
+            print("🎉 All 10 messages sent for today.")
 
-        else:
-            time.sleep(20)
+            await asyncio.sleep(3600)
 
+        await asyncio.sleep(20)
 
-def start(update, context):
-    update.message.reply_text("Bot is running 24/7 with scheduled messages!")
+# ==============================
+#   COMMAND
+# ==============================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Bot is running 24/7 with scheduled messages!🔥")
 
+# ==============================
+#   MAIN BOT
+# ==============================
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-def start_bot():
-    updater = Updater(TOKEN, use_context=True)
-    updater.dispatcher.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("start", start))
 
-    import threading
-    threading.Thread(target=auto_scheduler, args=(updater.bot,), daemon=True).start()
+    asyncio.create_task(scheduler(app))
 
-    updater.start_polling()
-    updater.idle()
-
+    await app.run_polling()
 
 if __name__ == "__main__":
-    start_bot()
+    asyncio.run(main())
+
